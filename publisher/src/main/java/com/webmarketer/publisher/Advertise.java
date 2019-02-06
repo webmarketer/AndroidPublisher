@@ -94,6 +94,7 @@ public class Advertise extends FrameLayout {
                             adImageView.setOnClickListener(new OnClickListener() {
                                 @Override
                                 public void onClick(View view) {
+                                    String url = advertise.getAdItem().getUrl() + "&" + params;
                                     Intent intent = new Intent(Intent.ACTION_VIEW);
                                     intent.setData(Uri.parse(url));
                                     try {
