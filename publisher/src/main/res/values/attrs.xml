@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <declare-styleable name="Advertise">
+        <attr name="type" format="enum">
+            <enum name="leaderboard" value="0"/>
+            <enum name="mpu" value="1"/>
+            <enum name="text" value="2"/>
+        </attr>
+        <attr name="borderWidth" format="dimension"/>
+        <attr name="borderColor" format="color"/>
+    </declare-styleable>
+</resources>
