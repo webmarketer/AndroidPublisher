@@ -4,11 +4,13 @@ import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.res.TypedArray;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
+import android.preference.PreferenceManager;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.view.View;
@@ -22,6 +24,7 @@ import android.widget.TextView;
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.request.target.GlideDrawableImageViewTarget;
 import com.gearback.methods.HttpPostRequest;
+import com.gearback.methods.Methods;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -42,6 +45,7 @@ public class Advertise extends FrameLayout {
     Activity activity;
     final Handler errorHandler = new Handler();
     AdvertiseHolder advertise;
+    Methods methods = new Methods();
 
     public Advertise(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -80,122 +84,136 @@ public class Advertise extends FrameLayout {
             @Override
             public void onFinished(String result) {
                 if (!result.equals("")) {
-                    try {
-                        JSONObject adHolder = new JSONObject(result);
-                        JSONArray ads = adHolder.getJSONArray("ads");
-                        JSONObject ad = ads.getJSONObject(0);
-                        AdItem item = new AdItem(ad.getString("title"), ad.getString("description"), ad.getString("image"), ad.getString("url"), ad.getString("domain"), ad.getString("favicon"));
-                        advertise = new AdvertiseHolder(adHolder.getString("group"), adHolder.getString("width"), adHolder.getString("height"), adHolder.getString("show_title"), adHolder.getString("description_chars"), item);
-                        if (type == 0 || type == 1) {
-                            view = inflate(getContext(), R.layout.image_ad_layout, null);
-                            RelativeLayout holder = view.findViewById(R.id.adContainer);
-                            adImageView = view.findViewById(R.id.adImage);
-                            adLogo = view.findViewById(R.id.adLogo);
-                            adImageView.setOnClickListener(new OnClickListener() {
-                                @Override
-                                public void onClick(View view) {
-                                    String url = advertise.getAdItem().getUrl() + "&" + params;
-                                    Intent intent = new Intent(Intent.ACTION_VIEW);
-                                    intent.setData(Uri.parse(url));
-                                    try {
-                                        con.startActivity(intent);
+                    if (result.equals("*SOCKET*")) {
+                        SharedPreferences mPrefs =  PreferenceManager.getDefaultSharedPreferences(activity);
+                        SharedPreferences.Editor editor = mPrefs.edit();
+                        editor.putBoolean("AD_TIMEOUT", true);
+                        editor.putString("AD_TIMEOUT_TIME", methods.calendarToString(Calendar.getInstance(), Methods.DATEFORMAT2));
+                        editor.apply();
+                    }
+                    else {
+                        SharedPreferences mPrefs =  PreferenceManager.getDefaultSharedPreferences(activity);
+                        SharedPreferences.Editor editor = mPrefs.edit();
+                        editor.putBoolean("AD_TIMEOUT", false);
+                        editor.apply();
+                        
+                        try {
+                            JSONObject adHolder = new JSONObject(result);
+                            JSONArray ads = adHolder.getJSONArray("ads");
+                            JSONObject ad = ads.getJSONObject(0);
+                            AdItem item = new AdItem(ad.getString("title"), ad.getString("description"), ad.getString("image"), ad.getString("url"), ad.getString("domain"), ad.getString("favicon"));
+                            advertise = new AdvertiseHolder(adHolder.getString("group"), adHolder.getString("width"), adHolder.getString("height"), adHolder.getString("show_title"), adHolder.getString("description_chars"), item);
+                            if (type == 0 || type == 1) {
+                                view = inflate(getContext(), R.layout.image_ad_layout, null);
+                                RelativeLayout holder = view.findViewById(R.id.adContainer);
+                                adImageView = view.findViewById(R.id.adImage);
+                                adLogo = view.findViewById(R.id.adLogo);
+                                adImageView.setOnClickListener(new OnClickListener() {
+                                    @Override
+                                    public void onClick(View view) {
+                                        String url = advertise.getAdItem().getUrl() + "&" + params;
+                                        Intent intent = new Intent(Intent.ACTION_VIEW);
+                                        intent.setData(Uri.parse(url));
+                                        try {
+                                            con.startActivity(intent);
+                                        }
+                                        catch (ActivityNotFoundException e) {
+                                            Log.d("Error", e.toString());
+                                        }
                                     }
-                                    catch (ActivityNotFoundException e) {
-                                        Log.d("Error", e.toString());
-                                    }
+                                });
+                                GlideDrawableImageViewTarget imageViewTarget = new GlideDrawableImageViewTarget(adImageView);
+                                if (!activity.isFinishing()) {
+                                    Glide.with(getContext().getApplicationContext()).load(advertise.getAdItem().getImage()).into(imageViewTarget);
                                 }
-                            });
-                            GlideDrawableImageViewTarget imageViewTarget = new GlideDrawableImageViewTarget(adImageView);
-                            if (!activity.isFinishing()) {
-                                Glide.with(getContext().getApplicationContext()).load(advertise.getAdItem().getImage()).into(imageViewTarget);
-                            }
 
-                            ViewTreeObserver vto = view.getViewTreeObserver();
-                            vto.addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
-                                @Override
-                                public void onGlobalLayout() {
-                                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.JELLY_BEAN) {
-                                        view.getViewTreeObserver().removeGlobalOnLayoutListener(this);
+                                ViewTreeObserver vto = view.getViewTreeObserver();
+                                vto.addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
+                                    @Override
+                                    public void onGlobalLayout() {
+                                        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.JELLY_BEAN) {
+                                            view.getViewTreeObserver().removeGlobalOnLayoutListener(this);
+                                        } else {
+                                            view.getViewTreeObserver().removeOnGlobalLayoutListener(this);
+                                        }
+                                        int viewWidth  = view.getMeasuredWidth();
+
+                                        double rate = Double.parseDouble(advertise.getWidth())/Double.parseDouble(advertise.getHeight());
+                                        double height = viewWidth/rate;
+                                        double logoHeight = height/6;
+                                        if (type == 1) {
+                                            logoHeight = height/10;
+                                        }
+                                        adImageView.getLayoutParams().width = viewWidth;
+                                        adImageView.getLayoutParams().height = (int)height;
+
+                                        RelativeLayout.LayoutParams lp = new RelativeLayout.LayoutParams((int)logoHeight, (int)logoHeight);
+                                        lp.setMargins((int)logoHeight/2, (int)logoHeight/2, 0, 0);
+                                        lp.addRule(RelativeLayout.ALIGN_PARENT_LEFT);
+                                        adLogo.setLayoutParams(lp);
+                                    }
+                                });
+
+                                if (borderWidth != 0) {
+                                    GradientDrawable border = new GradientDrawable();
+                                    border.setColor(0xFFFFFFFF); //white background
+                                    holder.setPadding(borderWidth, borderWidth, borderWidth, borderWidth);
+                                    if (borderColor != -1) {
+                                        border.setStroke(borderWidth, borderColor);
+                                    }
+                                    else {
+                                        border.setStroke(borderWidth, 0x26000000);
+                                    }
+                                    if(Build.VERSION.SDK_INT < Build.VERSION_CODES.JELLY_BEAN) {
+                                        holder.setBackgroundDrawable(border);
                                     } else {
-                                        view.getViewTreeObserver().removeOnGlobalLayoutListener(this);
+                                        holder.setBackground(border);
                                     }
-                                    int viewWidth  = view.getMeasuredWidth();
-
-                                    double rate = Double.parseDouble(advertise.getWidth())/Double.parseDouble(advertise.getHeight());
-                                    double height = viewWidth/rate;
-                                    double logoHeight = height/6;
-                                    if (type == 1) {
-                                        logoHeight = height/10;
+                                }
+                            }
+                            else {
+                                view = inflate(getContext(), R.layout.text_ad_layout, null);
+                                adTitle = view.findViewById(R.id.adTitle);
+                                adLink = view.findViewById(R.id.adLink);
+                                adDesc = view.findViewById(R.id.adDesc);
+                                adFavicon = view.findViewById(R.id.adFavicon);
+                                LinearLayout holder = view.findViewById(R.id.adContainer);
+                                adTitle.setText(advertise.getAdItem().getTitle());
+                                adLink.setText(advertise.getAdItem().getDomain());
+                                adDesc.setText(advertise.getAdItem().getDescription());
+                                GlideDrawableImageViewTarget imageViewTarget = new GlideDrawableImageViewTarget(adFavicon);
+                                if (!activity.isFinishing()) {
+                                    Glide.with(getContext().getApplicationContext()).load(advertise.getAdItem().getFavicon()).into(imageViewTarget);
+                                }
+                                view.setOnClickListener(new OnClickListener() {
+                                    @Override
+                                    public void onClick(View view) {
+                                        Intent i = new Intent(Intent.ACTION_VIEW);
+                                        i.setData(Uri.parse(advertise.getAdItem().getUrl()));
+                                        con.startActivity(i);
                                     }
-                                    adImageView.getLayoutParams().width = viewWidth;
-                                    adImageView.getLayoutParams().height = (int)height;
-
-                                    RelativeLayout.LayoutParams lp = new RelativeLayout.LayoutParams((int)logoHeight, (int)logoHeight);
-                                    lp.setMargins((int)logoHeight/2, (int)logoHeight/2, 0, 0);
-                                    lp.addRule(RelativeLayout.ALIGN_PARENT_LEFT);
-                                    adLogo.setLayoutParams(lp);
-                                }
-                            });
-
-                            if (borderWidth != 0) {
-                                GradientDrawable border = new GradientDrawable();
-                                border.setColor(0xFFFFFFFF); //white background
-                                holder.setPadding(borderWidth, borderWidth, borderWidth, borderWidth);
-                                if (borderColor != -1) {
-                                    border.setStroke(borderWidth, borderColor);
-                                }
-                                else {
-                                    border.setStroke(borderWidth, 0x26000000);
-                                }
-                                if(Build.VERSION.SDK_INT < Build.VERSION_CODES.JELLY_BEAN) {
-                                    holder.setBackgroundDrawable(border);
-                                } else {
-                                    holder.setBackground(border);
+                                });
+                                if (borderWidth != 0) {
+                                    GradientDrawable border = new GradientDrawable();
+                                    border.setColor(0xFFFFFFFF); //white background
+                                    holder.setPadding(borderWidth, borderWidth, borderWidth, borderWidth);
+                                    if (borderColor != -1) {
+                                        border.setStroke(borderWidth, borderColor);
+                                    }
+                                    else {
+                                        border.setStroke(borderWidth, 0x26000000);
+                                    }
+                                    if(Build.VERSION.SDK_INT < Build.VERSION_CODES.JELLY_BEAN) {
+                                        holder.setBackgroundDrawable(border);
+                                    } else {
+                                        holder.setBackground(border);
+                                    }
                                 }
                             }
+                            addView(view);
+                        } catch (JSONException e) {
+                            Log.e("JSON Parser", "Error parsing data " + e.toString());
                         }
-                        else {
-                            view = inflate(getContext(), R.layout.text_ad_layout, null);
-                            adTitle = view.findViewById(R.id.adTitle);
-                            adLink = view.findViewById(R.id.adLink);
-                            adDesc = view.findViewById(R.id.adDesc);
-                            adFavicon = view.findViewById(R.id.adFavicon);
-                            LinearLayout holder = view.findViewById(R.id.adContainer);
-                            adTitle.setText(advertise.getAdItem().getTitle());
-                            adLink.setText(advertise.getAdItem().getDomain());
-                            adDesc.setText(advertise.getAdItem().getDescription());
-                            GlideDrawableImageViewTarget imageViewTarget = new GlideDrawableImageViewTarget(adFavicon);
-                            if (!activity.isFinishing()) {
-                                Glide.with(getContext().getApplicationContext()).load(advertise.getAdItem().getFavicon()).into(imageViewTarget);
-                            }
-                            view.setOnClickListener(new OnClickListener() {
-                                @Override
-                                public void onClick(View view) {
-                                    Intent i = new Intent(Intent.ACTION_VIEW);
-                                    i.setData(Uri.parse(advertise.getAdItem().getUrl()));
-                                    con.startActivity(i);
-                                }
-                            });
-                            if (borderWidth != 0) {
-                                GradientDrawable border = new GradientDrawable();
-                                border.setColor(0xFFFFFFFF); //white background
-                                holder.setPadding(borderWidth, borderWidth, borderWidth, borderWidth);
-                                if (borderColor != -1) {
-                                    border.setStroke(borderWidth, borderColor);
-                                }
-                                else {
-                                    border.setStroke(borderWidth, 0x26000000);
-                                }
-                                if(Build.VERSION.SDK_INT < Build.VERSION_CODES.JELLY_BEAN) {
-                                    holder.setBackgroundDrawable(border);
-                                } else {
-                                    holder.setBackground(border);
-                                }
-                            }
-                        }
-                        addView(view);
-                    } catch (JSONException e) {
-                        Log.e("JSON Parser", "Error parsing data " + e.toString());
                     }
                 }
                 else {
